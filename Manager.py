@@ -5,20 +5,25 @@ import uuid
 
 import requests
 
+from Festify import Festify
+
+
 class ManagerState(Enum):
     STARTING = 0
     RUNNING = 1
     OVERLOAD = -1
+
 
 class FestifyManager:
 
     def __init__(self):
         self.state = ManagerState.STARTING
         self.active_processes = {}
+        self.results = {}
         self.result_queue = Queue()
         self.start_results_worker()
 
-    def start(self, playlist_name, base_64_image):
+    def start(self, playlist_name, base_64_image, access_token):
         if not base_64_image:
             return
 
@@ -26,11 +31,21 @@ class FestifyManager:
 
         festify_process_id = str(uuid.uuid4())
         festify_process = Process(name=festify_process_id, target=Festify.create_playlist,
-                                  args=(playlist_name, base_64_image, self.result_queue))
+                                  args=(
+                                      festify_process_id, playlist_name, base_64_image, access_token,
+                                      self.result_queue))
         self.active_processes[festify_process_id] = festify_process
 
         festify_process.start()
         return festify_process_id
+
+    def get_results(self, process_id):
+        if not process_id or process_id not in self.results:
+            return None
+
+        return self.results[process_id]
+
+
 
     def report_results(self):
         while True:
@@ -39,18 +54,13 @@ class FestifyManager:
                 for err in errs:
                     print(err)
 
-            data = {
-                id: process_id,
-                results: results
-            }
-
-            requests.post('localhost', json=data)
+            self.results[process_id] = results
 
     def start_results_worker(self):
         Thread(target=self.report_results, daemon=True).start()
 
     def update_state(self, new_state):
         if not new_state or not isinstance(new_state, ManagerState) or self.state == new_state:
-            raise ValueError('Invalid State')
+            return
 
         self.state = new_state

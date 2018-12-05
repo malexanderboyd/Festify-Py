@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Status</title>
+</head>
+<body>
+<p id="run-id"> {{ run_id if run_id else 'Invalid Run-Id' }} </p>
+
+
+<script type="text/javascript">
+    let run_id = document.getElementById('run-id').innerText;
+    console.log(`runid: ${run_id}`);
+    let ws = new WebSocket("ws://localhost:8080/status");
+    ws.onmessage = function (evt) {
+        console.log(evt);
+        let msg = JSON.parse(evt.data);
+        alert(msg['result']);
+    };
+    setInterval(
+        () => {
+            let status_msg = JSON.stringify({message: 'status', id: run_id});
+            ws.send(status_msg)
+        }, 3000
+    )
+</script>
+</body>
+</html>
