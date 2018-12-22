@@ -1,16 +1,22 @@
 import base64
 import json
 import os
+import pathlib
 import urllib.request
+import uuid
 
 import gevent
 import requests
-from flask import Flask, request, render_template, redirect, url_for
+from flask import Flask, request, render_template, redirect, url_for, session, flash
 from flask_sockets import Sockets
-
+from werkzeug.utils import secure_filename
 from Manager import FestifyManager
 
 app = Flask(__name__)
+UPLOAD_FOLDER = 'uploads'
+app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'tiff', 'pdf'}
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 sockets = Sockets(app)
 
 Festify = FestifyManager()
@@ -37,15 +43,35 @@ STATE = ""
 SHOW_DIALOG_bool = True
 SHOW_DIALOG_str = str(SHOW_DIALOG_bool).lower()
 
+app.secret_key = os.environ.get('FLASK_SECRET_KEY', b'$95%89c#5a9fd1')
+
+
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
 
 @app.route('/')
-def hello_world():
+def index():
     return render_template('index.html')
 
 
-@app.route('/start')
+@app.route('/start', methods=['POST'])
 def start():
-    return redirect('/authorize')
+    if 'image' not in request.files:
+        flash('No file part')
+        return redirect(request.url)
+
+    image = request.files['image']
+    if image and allowed_file(image.filename):
+        file_type = pathlib.Path(image.filename).suffix
+        playlist_id = str(uuid.uuid4())
+        image.filename = playlist_id + file_type
+        filename = secure_filename(image.filename)
+        image.save(os.path.join(app.config['UPLOAD_FOLDER'], image.filename))
+        session['image'] = filename
+        session['id'] = playlist_id
+        return redirect(url_for('.authorization'))
 
 
 auth_query_parameters = {
@@ -105,7 +131,10 @@ def authorization_callback():
     response_data = json.loads(post_request.text)
     access_token = response_data["access_token"]
 
-    run_id = Festify.start('Festifys Python', test_img, access_token)
+    image_id = session['image']
+    playlist_id = session['id']
+    session.clear()
+    run_id = Festify.start('Festifys Python', playlist_id, image_id, access_token)
 
     return redirect(url_for('.festify', run_id=run_id))
 
@@ -114,6 +143,10 @@ if __name__ == "__main__":
     from gevent import pywsgi
     from geventwebsocket.handler import WebSocketHandler
 
-    server = pywsgi.WSGIServer(('0.0.0.0', 8080), app, handler_class=WebSocketHandler)
-    print('Serving on 8080')
+    HOST_IP = '127.0.0.1'
+    HOST_PORT = 8080
+    HOST_ADDRESS = (HOST_IP, HOST_PORT)
+
+    server = pywsgi.WSGIServer(HOST_ADDRESS, app, handler_class=WebSocketHandler)
+    print(f'Serving Festify on http://{HOST_IP}:{HOST_PORT}')
     server.serve_forever()

@@ -10,6 +10,8 @@ Flask = "*"
 requests = "*"
 spotipy = "*"
 flask-sockets = "*"
+google-cloud-vision = "*"
+pytest = "*"
 
 [requires]
 python_version = "3.7"

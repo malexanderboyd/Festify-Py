@@ -3,8 +3,6 @@ from multiprocessing import Process, Queue
 from threading import Thread
 import uuid
 
-import requests
-
 from Festify import Festify
 
 
@@ -23,29 +21,27 @@ class FestifyManager:
         self.result_queue = Queue()
         self.start_results_worker()
 
-    def start(self, playlist_name, base_64_image, access_token):
+    def start(self, playlist_id, playlist_name, base_64_image, access_token):
         if not base_64_image:
             return
 
         self.update_state(ManagerState.RUNNING)
 
-        festify_process_id = str(uuid.uuid4())
-        festify_process = Process(name=festify_process_id, target=Festify.create_playlist,
+
+        festify_process = Process(name=playlist_id, target=Festify.create_playlist,
                                   args=(
-                                      festify_process_id, playlist_name, base_64_image, access_token,
+                                      playlist_id, playlist_name, base_64_image, access_token,
                                       self.result_queue))
-        self.active_processes[festify_process_id] = festify_process
+        self.active_processes[playlist_id] = festify_process
 
         festify_process.start()
-        return festify_process_id
+        return playlist_id
 
     def get_results(self, process_id):
         if not process_id or process_id not in self.results:
             return None
 
         return self.results[process_id]
-
-
 
     def report_results(self):
         while True:
